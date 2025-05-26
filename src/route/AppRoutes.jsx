@@ -8,6 +8,10 @@ import InvestmentCalculator from '@/LandingPage/InvestmentSection/InvestmentCalc
 import Dashboard from '@/pages/Dashboard/Index';
 import Cookies from 'js-cookie';
 import Investors from '@/pages/Investors/Index';
+import { Pools } from '@/pages/Pools';
+import Requests from '@/pages/Requests/Index';
+import MeetingRequests from '@/pages/Meeting Requests/Index';
+import GraveyardInvestors from '@/pages/Graveyard Investors/Index';
 
 // Authentication guard
 const ProtectedRoute = ({ children }) => {
@@ -54,7 +58,40 @@ const AppRoutes = (isAuthenticated) => [
       // </ProtectedRoute>
     ),
   },
+  {
+    path: '/requests',
+    element: (
+      // <ProtectedRoute isAuthenticated={isAuthenticated}>
+      <Requests />
+      // </ProtectedRoute>
+    ),
+  },
 
+  {
+    path: '/pools',
+    element: (
+      // <ProtectedRoute isAuthenticated={isAuthenticated}>
+      <Pools />
+      // </ProtectedRoute>
+    ),
+  },
+
+  {
+    path: '/meetingRequest',
+    element: (
+      // <ProtectedRoute isAuthenticated={isAuthenticated}>
+      <MeetingRequests />
+      // </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/graveyardInvestors',
+    element: (
+      // <ProtectedRoute isAuthenticated={isAuthenticated}>
+      <GraveyardInvestors />
+      // </ProtectedRoute>
+    ),
+  },
 
   {
     path: '/profile',

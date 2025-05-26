@@ -16,6 +16,7 @@ import ROIIcon from '../../assets/Dashboard/ROIIcon.svg';
 import IRequestIcon from '../../assets/Dashboard/IRIcon.svg';
 import PoolIcon from '../../assets/Dashboard/PoolIcon.svg';
 import InvestorsTable from "./Investors";
+import CurrentCycleBanner from "./InvestmentCycle";
 const data = [
     { cycle: "Previous Cycle", value: 45, fill: "#60A5FA" },
     { cycle: "Current Cycle", value: 20, fill: "#22C55E" },
@@ -40,6 +41,7 @@ export default function Dashboard() {
                     <StatCard title="Pool Info" amount="3" color="bg-yellow-100" icon={Pool} bottomIcon={PoolIcon} />
                 </div>
 
+                <CurrentCycleBanner />
                 {/* Cycle Progress Overview */}
                 <div className="grid lg:grid-cols-2 gap-4">
                     <Card>
