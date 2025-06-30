@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -13,6 +13,10 @@ import { InvestorDetailModal } from "./viewInvestors"
 import { AddInvestorsModal } from "./AddInvestors"
 import DashboardLayout from "@/layouts/Layout"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useDispatch, useSelector } from "react-redux"
+import { fetchGetData } from "@/redux/GetApiSlice/GetSlice"
+import { fetchData } from "@/redux/GetApiSlice/Index"
+import { postData, resetPostState, resetPostStatus } from "@/redux/PostApiSlice/Index"
 // import { CreatePoolModal } from "@/components/create-pool-modal"
 // import { DeletePoolAlert } from "@/components/delete-pool-alert"
 // import { InvestorDetailModal } from "@/components/investor-detail-modal"
@@ -183,6 +187,7 @@ const initialPoolsData = [
 ]
 
 export function Pools() {
+    const dispatch = useDispatch()
     const [poolsData, setPoolsData] = useState(initialPoolsData)
     const [selectedPool, setSelectedPool] = useState(initialPoolsData[0])
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
@@ -191,15 +196,31 @@ export function Pools() {
     const [selectedInvestor, setSelectedInvestor] = useState(null)
     const [isInvestorDetailOpen, setIsInvestorDetailOpen] = useState(false)
     const [isAddInvestorsOpen, setIsAddInvestorsOpen] = useState(false)
+    const { getdata, status, error, successMessage } = useSelector((state) => state.getapi);
+    const { data } = useSelector((state) => state.api);
+    const investors = getdata?.data
+    const Pools = data?.data;
+
+    console.log("pools", Pools);
+
+    console.log("Investors", investors);
+
+    useEffect(() => {
+        dispatch(fetchGetData("/all-investors"))
+    }, [dispatch])
+    useEffect(() => {
+        dispatch(fetchData("/pools"))
+    }, [])
 
     const handlePoolSelect = (pool) => {
         setSelectedPool(pool)
     }
 
     const handleCreatePool = (newPool) => {
-        const updatedPools = [...poolsData, newPool]
-        setPoolsData(updatedPools)
-        setSelectedPool(newPool) // Select the newly created pool
+        dispatch(postData({ endpoint: `/pools`, payload: newPool })).finally(dispatch(resetPostStatus()))
+        // const updatedPools = [...poolsData, newPool]
+        // setPoolsData(updatedPools)
+        // setSelectedPool(newPool) // Select the newly created pool
     }
 
     const handleDeleteClick = (pool) => {
@@ -254,6 +275,10 @@ export function Pools() {
         setSelectedPool(updatedPool)
     }
 
+    console.log(selectedPool);
+    console.log(selectedPool?.pool_investors);
+
+
     return (
         <DashboardLayout>
             <div className="p-6  md:px-12 mx-auto py-6">
@@ -275,7 +300,7 @@ export function Pools() {
                         <div className="md:col-span-1">
                             <h2 className="text-lg font-semibold mb-4">All Pools</h2>
                             <div className="space-y-4">
-                                {poolsData.map((pool) => (
+                                {Pools?.map((pool) => (
                                     <Card
                                         key={pool.id}
                                         className={`p-4 cursor-pointer hover:shadow-md transition-shadow ${selectedPool?.id === pool.id ? "border-2 border-blue-500 bg-blue-500 text-white" : ""
@@ -285,9 +310,9 @@ export function Pools() {
                                         <div className="flex items-start justify-between">
                                             <div>
                                                 <div className="flex justify-between items-center">
-                                                    <h3 className="font-semibold">{pool.name}</h3>
+                                                    <h3 className="font-semibold">{pool.pool_name}</h3>
                                                     <div
-                                                        className={`ml-2 w-5 h-5 rounded-md ${pool.color === "yellow"
+                                                        className={`ml-2 w-5 h-5 rounded-md ${pool.label === "yellow"
                                                             ? "bg-yellow-400"
                                                             : pool.color === "red"
                                                                 ? "bg-red-500"
@@ -305,22 +330,22 @@ export function Pools() {
                                                             }`}
                                                     />
                                                 </div>
-                                                <p className={`text-xs text-gray-500 mt-1 ${selectedPool?.id === pool.id ? "text-white" : ""}`}>{pool.description}</p>
+                                                <p className={`text-xs text-gray-500 mt-1 ${selectedPool?.id === pool.id ? "text-white" : ""}`}>{pool.note}</p>
                                             </div>
                                         </div>
-                                        <div className="flex mt-3 -space-x-2">
-                                            {pool.investors.slice(0, 3).map((investor) => (
-                                                <Avatar key={investor.id} className="border-2 border-white w-6 h-6">
-                                                    <AvatarImage src={investor.avatar || "/placeholder.svg"} />
-                                                    <AvatarFallback className="text-xs">{investor.name.charAt(0)}</AvatarFallback>
-                                                </Avatar>
-                                            ))}
-                                            {pool.totalInvestors > 3 && (
-                                                <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs text-gray-600 border-2 border-white z-10">
-                                                    +{pool.totalInvestors - 3}
-                                                </div>
-                                            )}
-                                        </div>
+                                        {/* <div className="flex mt-3 -space-x-2"> */}
+                                        {/* {pool.investors.slice(0, 3).map((investor) => ( */}
+                                        {/* <Avatar key={investor.id} className="border-2 border-white w-6 h-6"> */}
+                                        {/* <AvatarImage src={investor.avatar || "/placeholder.svg"} /> */}
+                                        {/* <AvatarFallback className="text-xs">{investor.name.charAt(0)}</AvatarFallback> */}
+                                        {/* </Avatar> */}
+                                        {/* ))} */}
+                                        {/* {pool.totalInvestors > 3 && ( */}
+                                        {/* <div className="flex items-center justify-center w-6 h-6 rounded-full bg-gray-200 text-xs text-gray-600 border-2 border-white z-10"> */}
+                                        {/* +{pool.totalInvestors - 3} */}
+                                        {/* </div> */}
+                                        {/* )} */}
+                                        {/* </div> */}
                                     </Card>
                                 ))}
                             </div>
@@ -335,7 +360,7 @@ export function Pools() {
                                             <div className="flex items-center">
                                                 <h2 className="text-xl font-bold">{selectedPool.name}</h2>
                                                 <div
-                                                    className={`ml-2 w-5 h-5 rounded-md ${selectedPool.color === "yellow"
+                                                    className={`ml-2 w-5 h-5 rounded-md ${selectedPool.label === "yellow"
                                                         ? "bg-yellow-400"
                                                         : selectedPool.color === "red"
                                                             ? "bg-red-500"
@@ -353,7 +378,7 @@ export function Pools() {
                                                         }`}
                                                 />
                                             </div>
-                                            <p className="text-sm text-gray-500 mt-1">{selectedPool.description}</p>
+                                            <p className="text-sm text-gray-500 mt-1">{selectedPool.note}</p>
                                         </div>
                                         <div className="flex space-x-2">
                                             <Button
@@ -372,62 +397,62 @@ export function Pools() {
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                         <Card className="p-4">
                                             <h3 className="text-sm text-gray-500">Total Investors</h3>
-                                            <p className="text-3xl font-bold">{selectedPool.totalInvestors}</p>
+                                            <p className="text-3xl font-bold">{selectedPool.pool_investors_count}</p>
                                         </Card>
                                         <Card className="p-4">
                                             <h3 className="text-sm text-gray-500">Total Investments</h3>
-                                            <p className="text-3xl font-bold">${selectedPool.totalInvestments.toLocaleString()}</p>
+                                            {/* <p className="text-3xl font-bold">${selectedPool.totalInvestments.toLocaleString()}</p> */}
                                         </Card>
                                         <Card className="p-4">
                                             <h3 className="text-sm text-gray-500">Total ROI</h3>
-                                            <p className="text-3xl font-bold">${selectedPool.totalROI.toLocaleString()}</p>
+                                            {/* <p className="text-3xl font-bold">${selectedPool.totalROI.toLocaleString()}</p> */}
                                         </Card>
                                     </div>
 
-                                    <div className="mb-6">
-                                        <h3 className="text-lg font-semibold mb-4">Filter</h3>
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label className="text-sm text-gray-500 mb-1 block">Select Cycle Period</label>
-                                                <Select defaultValue="first">
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select Cycle Period" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="first">First Period (0-15 Days)</SelectItem>
-                                                        <SelectItem value="second">Second Period (16-30 Days)</SelectItem>
-                                                        <SelectItem value="third">Third Period (31-45 Days)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div>
-                                                <label className="text-sm text-gray-500 mb-1 block">Select Type</label>
-                                                <Select defaultValue="active">
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select Type" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="active">Active/Inactive</SelectItem>
-                                                        <SelectItem value="active-only">Active Only</SelectItem>
-                                                        <SelectItem value="inactive-only">Inactive Only</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                            <div>
-                                                <label className="text-sm text-gray-500 mb-1 block">Amount</label>
-                                                <Select defaultValue="range1">
-                                                    <SelectTrigger>
-                                                        <SelectValue placeholder="Select Amount Range" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="range1">$1000 - $5000</SelectItem>
-                                                        <SelectItem value="range2">$5001 - $10000</SelectItem>
-                                                        <SelectItem value="range3">$10001+</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    {/* <div className="mb-6"> */}
+                                    {/* <h3 className="text-lg font-semibold mb-4">Filter</h3> */}
+                                    {/* <div className="grid grid-cols-1 md:grid-cols-3 gap-4"> */}
+                                    {/* <div> */}
+                                    {/* <label className="text-sm text-gray-500 mb-1 block">Select Cycle Period</label> */}
+                                    {/* <Select defaultValue="first"> */}
+                                    {/* <SelectTrigger> */}
+                                    {/* <SelectValue placeholder="Select Cycle Period" /> */}
+                                    {/* </SelectTrigger> */}
+                                    {/* <SelectContent> */}
+                                    {/* <SelectItem value="first">First Period (0-15 Days)</SelectItem> */}
+                                    {/* <SelectItem value="second">Second Period (16-30 Days)</SelectItem> */}
+                                    {/* <SelectItem value="third">Third Period (31-45 Days)</SelectItem> */}
+                                    {/* </SelectContent> */}
+                                    {/* </Select> */}
+                                    {/* </div> */}
+                                    {/* <div> */}
+                                    {/* <label className="text-sm text-gray-500 mb-1 block">Select Type</label> */}
+                                    {/* <Select defaultValue="active"> */}
+                                    {/* <SelectTrigger> */}
+                                    {/* <SelectValue placeholder="Select Type" /> */}
+                                    {/* </SelectTrigger> */}
+                                    {/* <SelectContent> */}
+                                    {/* <SelectItem value="active">Active/Inactive</SelectItem> */}
+                                    {/* <SelectItem value="active-only">Active Only</SelectItem> */}
+                                    {/* <SelectItem value="inactive-only">Inactive Only</SelectItem> */}
+                                    {/* </SelectContent> */}
+                                    {/* </Select> */}
+                                    {/* </div> */}
+                                    {/* <div> */}
+                                    {/* <label className="text-sm text-gray-500 mb-1 block">Amount</label> */}
+                                    {/* <Select defaultValue="range1"> */}
+                                    {/* <SelectTrigger> */}
+                                    {/* <SelectValue placeholder="Select Amount Range" /> */}
+                                    {/* </SelectTrigger> */}
+                                    {/* <SelectContent> */}
+                                    {/* <SelectItem value="range1">$1000 - $5000</SelectItem> */}
+                                    {/* <SelectItem value="range2">$5001 - $10000</SelectItem> */}
+                                    {/* <SelectItem value="range3">$10001+</SelectItem> */}
+                                    {/* </SelectContent> */}
+                                    {/* </Select> */}
+                                    {/* </div> */}
+                                    {/* </div> */}
+                                    {/* </div> */}
 
                                     <div className="overflow-x-auto">
                                         <Table className="w-full overflow-auto">
@@ -441,19 +466,20 @@ export function Pools() {
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {selectedPool.investors.length > 0 ? (
-                                                    selectedPool.investors.map((investor) => (
+                                                <h1>{selectedPool?.pool_investors?.length}hhhh</h1>
+                                                {selectedPool.pool_investors > 0 ? (
+                                                    selectedPool.pool_investors?.map((investor) => (
                                                         <TableRow key={investor.id} className="border-b last:border-b-0">
                                                             <TableCell className="py-4">
                                                                 <div className="flex items-center">
                                                                     <Avatar className="mr-2 h-8 w-8">
                                                                         <AvatarImage src={investor.avatar || "/placeholder.svg"} alt={investor.name} />
-                                                                        <AvatarFallback>{investor.name.charAt(0)}</AvatarFallback>
+                                                                        <AvatarFallback>{investor.user.name.charAt(0)}</AvatarFallback>
                                                                     </Avatar>
-                                                                    <span>{investor.name}</span>
+                                                                    <span>{investor.user.name}</span>
                                                                 </div>
                                                             </TableCell>
-                                                            <TableCell className="py-4">${investor.investment.toLocaleString()}</TableCell>
+                                                            <TableCell className="py-4">${investor.invested_amount.toLocaleString()}</TableCell>
                                                             <TableCell className="py-4">
                                                                 <Badge
                                                                     variant="secondary"
@@ -531,7 +557,7 @@ export function Pools() {
                     isOpen={isAddInvestorsOpen}
                     onClose={() => setIsAddInvestorsOpen(false)}
                     onAddInvestors={handleAddInvestors}
-                    currentInvestorIds={selectedPool?.investors.map((inv) => inv.id) || []}
+                    currentInvestorIds={selectedPool?.pool_investors?.map((inv) => inv.id) || []}
                 />
             </div>
         </DashboardLayout>

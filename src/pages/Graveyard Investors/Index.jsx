@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, ChevronLeft, ChevronRight, Calendar } from "lucide-react"
 import DashboardLayout from "@/layouts/Layout"
+import { fetchData } from "@/redux/GetApiSlice/Index"
+import { useDispatch, useSelector } from "react-redux"
+import { resetData } from "@/redux/GetApiSlice/GetSlice"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Media_BASE_URL } from "@/utils/media_Base_URL"
 
 const investorsData = [
     {
@@ -176,30 +181,31 @@ const investorsData = [
 ]
 
 export default function GraveyardInvestors() {
+    const dispatch = useDispatch();
     const [searchTerm, setSearchTerm] = useState("")
     const [typeFilter, setTypeFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState("all")
     const [currentPage, setCurrentPage] = useState(1)
     const [dateRange, setDateRange] = useState("Feb 15 - Mar 31")
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-    const itemsPerPage = 8
-    const totalItems = 150 // Simulated total count
+    const { data } = useSelector((state) => state.api);
+    const itemsPerPage = 10
+    const totalItems = data?.data?.length // Simulated total count
 
-    const getStatusBadge = (status) => {
-        const statusConfig = {
-            Withdraw: { variant: "default", className: "bg-blue-100 text-blue-800 hover:bg-blue-100" },
-            Pending: { variant: "secondary", className: "bg-gray-100 text-gray-800 hover:bg-gray-100" },
-            Requested: { variant: "destructive", className: "bg-red-100 text-red-800 hover:bg-red-100" },
-            Active: { variant: "default", className: "bg-blue-500 text-white hover:bg-blue-500" },
-        }
 
-        const config = statusConfig[status] || { variant: "outline" }
-        return (
-            <Badge variant={config.variant} className={config.className}>
-                {status}
-            </Badge>
-        )
-    }
+    const handleViewDetail = (user) => {
+        setSelectedUser(user);
+        setIsDialogOpen(true);
+    };
+
+
+    useEffect(() => {
+        dispatch(resetData());
+        dispatch(fetchData("/graveyard/investors"))
+    }, [])
+
 
     const getTypeBadge = (type) => {
         return type === "Active" ? (
@@ -210,21 +216,12 @@ export default function GraveyardInvestors() {
             </Badge>
         )
     }
-
-    const getInitials = (name) => {
-        return name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
-    }
-
     // Filter and search logic
-    const filteredInvestors = investorsData.filter((investor) => {
+    const filteredInvestors = data?.data?.filter((investor) => {
         const matchesSearch =
-            investor.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            investor.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            investor.id.toString().includes(searchTerm)
+            investor.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            investor.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            investor.id?.toString().includes(searchTerm)
 
         const matchesType = typeFilter === "all" || investor.type.toLowerCase() === typeFilter.toLowerCase()
         const matchesStatus = statusFilter === "all" || investor.status.toLowerCase() === statusFilter.toLowerCase()
@@ -236,8 +233,8 @@ export default function GraveyardInvestors() {
     const totalPages = Math.ceil(totalItems / itemsPerPage)
     const startIndex = (currentPage - 1) * itemsPerPage
     const endIndex = startIndex + itemsPerPage
-    const currentInvestors = filteredInvestors.slice(startIndex, endIndex)
-    const showingCount = Math.min(endIndex, filteredInvestors.length)
+    const currentInvestors = filteredInvestors?.slice(startIndex, endIndex)
+    const showingCount = Math.min(endIndex, filteredInvestors?.length)
 
     const handlePageChange = (page) => {
         setCurrentPage(page)
@@ -286,21 +283,21 @@ export default function GraveyardInvestors() {
                                     cycles but their details are retained for reference.
                                 </p>
                             </div>
-                            <div className="flex items-center gap-2 text-sm text-gray-600">
-                                <Calendar className="h-4 w-4" />
-                                <span className="font-medium">Select Cycle:</span>
-                                <Select value={dateRange} onValueChange={setDateRange}>
-                                    <SelectTrigger className="w-[140px] h-8">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Feb 15 - Mar 31">Feb 15 - Mar 31</SelectItem>
-                                        <SelectItem value="Jan 1 - Feb 14">Jan 1 - Feb 14</SelectItem>
-                                        <SelectItem value="Mar 1 - Apr 15">Mar 1 - Apr 15</SelectItem>
-                                        <SelectItem value="Apr 16 - May 31">Apr 16 - May 31</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            {/* <div className="flex items-center gap-2 text-sm text-gray-600"> */}
+                            {/* <Calendar className="h-4 w-4" /> */}
+                            {/* <span className="font-medium">Select Cycle:</span> */}
+                            {/* <Select value={dateRange} onValueChange={setDateRange}> */}
+                            {/* <SelectTrigger className="w-[140px] h-8"> */}
+                            {/* <SelectValue /> */}
+                            {/* </SelectTrigger> */}
+                            {/* <SelectContent> */}
+                            {/* <SelectItem value="Feb 15 - Mar 31">Feb 15 - Mar 31</SelectItem> */}
+                            {/* <SelectItem value="Jan 1 - Feb 14">Jan 1 - Feb 14</SelectItem> */}
+                            {/* <SelectItem value="Mar 1 - Apr 15">Mar 1 - Apr 15</SelectItem> */}
+                            {/* <SelectItem value="Apr 16 - May 31">Apr 16 - May 31</SelectItem> */}
+                            {/* </SelectContent> */}
+                            {/* </Select> */}
+                            {/* </div> */}
                         </div>
                     </div>
 
@@ -345,43 +342,45 @@ export default function GraveyardInvestors() {
                                     <TableHeader>
                                         <TableRow className="border-b">
                                             <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Name</TableHead>
-                                            <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Last Active Cycle</TableHead>
-                                            <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Status</TableHead>
+                                            {/* <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Last Active Cycle</TableHead> */}
+                                            {/* <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Status</TableHead> */}
                                             <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Investment</TableHead>
                                             <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Type</TableHead>
                                             <TableHead className="text-left font-semibold text-gray-900 py-4 px-6">Action</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {currentInvestors.map((investor) => (
-                                            <TableRow key={investor.id} className="border-b border-gray-100 hover:bg-gray-50">
-                                                <TableCell className="py-4 px-6">
-                                                    <div className="flex items-center gap-3">
-                                                        <Avatar className="h-10 w-10">
-                                                            <AvatarImage src={investor.avatar || "/placeholder.svg"} alt={investor.name} />
-                                                            <AvatarFallback className="bg-blue-100 text-blue-600 font-semibold">
-                                                                {getInitials(investor.name)}
-                                                            </AvatarFallback>
-                                                        </Avatar>
-                                                        <span className="font-medium text-gray-900">{investor.name}</span>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="py-4 px-6 text-gray-600">{investor.lastActiveCycle}</TableCell>
-                                                <TableCell className="py-4 px-6">{getStatusBadge(investor.status)}</TableCell>
-                                                <TableCell className="py-4 px-6 font-semibold text-gray-900">{investor.investment}</TableCell>
-                                                <TableCell className="py-4 px-6">{getTypeBadge(investor.type)}</TableCell>
-                                                <TableCell className="py-4 px-6">
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="sm"
-                                                        className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                                    >
-                                                        View detail
-                                                    </Button>
+                                        {currentInvestors && currentInvestors.length > 0 ? (
+                                            currentInvestors.map((investor) => (
+                                                <TableRow key={investor.id} className="border-b border-gray-100 hover:bg-gray-50">
+                                                    <TableCell className="py-4 px-6">
+                                                        <div className="flex items-center gap-3">
+                                                            <span className="font-medium text-gray-900">{investor.name}</span>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell className="py-4 px-6 font-semibold text-gray-900">{investor.amount}</TableCell>
+                                                    <TableCell className="py-4 px-6">{getTypeBadge(investor.type)}</TableCell>
+                                                    <TableCell className="py-4 px-6">
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                                            onClick={() => handleViewDetail(investor)}
+                                                        >
+                                                            View detail
+                                                        </Button>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
+                                                    No investors available.
                                                 </TableCell>
                                             </TableRow>
-                                        ))}
+                                        )}
                                     </TableBody>
+
                                 </Table>
                             </div>
                         </CardContent>
@@ -390,7 +389,7 @@ export default function GraveyardInvestors() {
                     {/* Pagination */}
                     <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                         <div className="text-sm text-gray-600">
-                            Showing {Math.min(startIndex + 1, filteredInvestors.length)} to {showingCount} from {totalItems} data
+                            Showing {Math.min(startIndex + 1, filteredInvestors?.length)} to {showingCount} from {totalItems} data
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -421,6 +420,46 @@ export default function GraveyardInvestors() {
                     </div>
                 </div>
             </div>
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="text-lg">Investor Details</DialogTitle>
+                    </DialogHeader>
+                    {selectedUser && (
+                        <div className="space-y-3 text-sm">
+                            <p><strong>Name:</strong> {selectedUser.name}</p>
+                            <p><strong>Email:</strong> {selectedUser.email}</p>
+                            <p><strong>Phone:</strong> {selectedUser.phone || "N/A"}</p>
+                            <p><strong>CNIC No:</strong> {selectedUser.cnic_no}</p>
+                            <p><strong>Investment Amount:</strong> ${selectedUser.amount}</p>
+                            <p><strong>Type:</strong> {selectedUser.type}</p>
+                            <p><strong>Status:</strong> {selectedUser.status}</p>
+                            <p><strong>Role:</strong> {selectedUser.role}</p>
+                            {selectedUser.cnic_front && (
+                                <div>
+                                    <strong>CNIC Front:</strong>
+                                    <img
+                                        src={`${Media_BASE_URL}/${selectedUser.cnic_front}`}
+                                        alt="CNIC Front"
+                                        className="mt-1 rounded border max-w-full h-auto"
+                                    />
+                                </div>
+                            )}
+                            {selectedUser.cnic_back && (
+                                <div>
+                                    <strong>CNIC Back:</strong>
+                                    <img
+                                        src={`${Media_BASE_URL}/${selectedUser.cnic_back}`}
+                                        alt="CNIC Back"
+                                        className="mt-1 rounded border max-w-full h-auto"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </DialogContent>
+            </Dialog>
+
         </DashboardLayout>
     )
 }

@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
+import { useDispatch } from "react-redux"
 
 export function CreatePoolModal({ isOpen, onClose, onCreatePool }) {
+    const dispatch = useDispatch()
     const [poolName, setPoolName] = useState("")
     const [selectedColor, setSelectedColor] = useState("yellow")
     const [selectedInvestors, setSelectedInvestors] = useState([])
@@ -22,6 +24,7 @@ export function CreatePoolModal({ isOpen, onClose, onCreatePool }) {
         { id: "4", name: "Amelia Walker", avatar: "/placeholder.svg?height=40&width=40" },
         { id: "5", name: "John Rogers", avatar: "/placeholder.svg?height=40&width=40" },
     ]
+
 
     // Available colors
     const colors = [
@@ -46,22 +49,17 @@ export function CreatePoolModal({ isOpen, onClose, onCreatePool }) {
 
         // Create new pool object
         const newPool = {
-            id: `pool-${Date.now()}`,
-            name: poolName,
-            color: selectedColor,
-            description: note || "New investment pool",
-            totalInvestors: selectedInvestors.length,
-            totalInvestments: 0,
-            totalROI: 0,
+            // id: `pool-${Date.now()}`,
+            pool_name: poolName,
+            label: selectedColor,
+            note: note || "New investment pool",
+            // totalInvestors: selectedInvestors.length,
+            // totalInvestments: 0,
+            roi: 0,
             investors: selectedInvestors.map((id) => {
                 const investor = availableInvestors.find((inv) => inv.id === id)
                 return {
                     id: investor.id,
-                    name: investor.name,
-                    avatar: investor.avatar,
-                    investment: 0,
-                    status: "Active",
-                    withdrawalStatus: "Pending",
                 }
             }),
         }
@@ -122,13 +120,13 @@ export function CreatePoolModal({ isOpen, onClose, onCreatePool }) {
                                             aria-label={`Select ${color.id} color`}
                                         />
                                     ))}
-                                    <button
+                                    {/* <button
                                         type="button"
                                         className="w-6 h-6 rounded-full bg-gray-200 flex items-center justify-center text-gray-600"
                                         aria-label="Add custom color"
                                     >
                                         <Plus className="h-4 w-4" />
-                                    </button>
+                                    </button> */}
                                 </div>
                             </div>
 

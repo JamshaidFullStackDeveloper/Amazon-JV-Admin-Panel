@@ -26,9 +26,11 @@ const validationSchema = yup.object({
 export default function Login() {
     const [showPassword, setShowPassword] = useState(false);
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, user } = useAuth();
+    const Token = Cookies.get("token");
     const { showLoader, hideLoader } = useLoader();
     const { showToast } = useGlobalToast();
+    console.log(user);
 
     const formik = useFormik({
         initialValues: {
@@ -51,8 +53,14 @@ export default function Login() {
                         Cookies.remove("email");
                         Cookies.remove("password");
                     }
-                    navigate("/dashboard");
-                    showToast("Login successful!", "success");
+                    if (result?.data?.role !== "Admin") {
+                        showToast("Investors are not allowed to log in!", "error");
+                        navigate("/");
+                        return
+                    } else {
+                        showToast("Login successful!", "success");
+                        navigate("/dashboard");
+                    }
                     // ✅ Play AI-generated voice after successful login
                     const audioUrl = await playTextToSpeech("Login successful! Welcome to your Amazon JV dashboard.");
                     if (audioUrl) {

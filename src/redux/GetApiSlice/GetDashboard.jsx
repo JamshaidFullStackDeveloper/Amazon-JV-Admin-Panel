@@ -2,25 +2,23 @@ import apiClient from '@/utils/apiClient';
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 
 // Example async thunk for API integration
-export const fetchData = createAsyncThunk(
-    'api/fetchData',
+export const fetchDashboardData = createAsyncThunk(
+    'api/fetchDashboardData',
     async (endpoint, { rejectWithValue }) => {
         try {
             const response = await apiClient(endpoint);
-            if (!response.ok) {
-                throw new Error('Failed to fetch data');
-            }
-            const data = await response.json();
 
-            return data;
+            if (!response || !response.data) {
+                throw new Error('No data received from API');
+            }
+            return response.data.data;
         } catch (error) {
             return rejectWithValue(error.message);
         }
     }
 );
-
-const apiSlice = createSlice({
-    name: 'api',
+const apiDashboardSlice = createSlice({
+    name: 'dashboardApi',
     initialState: {
         data: null,
         status: 'idle',
@@ -35,21 +33,24 @@ const apiSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
-            .addCase(fetchData.pending, (state) => {
+            .addCase(fetchDashboardData.pending, (state) => {
                 state.status = 'loading';
+                state.data = null; // Reset existing data before fetching new data
+                state.error = null;
+                state.successMessage = null;
             })
-            .addCase(fetchData.fulfilled, (state, action) => {
+            .addCase(fetchDashboardData.fulfilled, (state, action) => {
                 state.status = 'succeeded';
                 state.data = action.payload;
                 state.successMessage = action.payload.successMessage;
             })
-            .addCase(fetchData.rejected, (state, action) => {
+            .addCase(fetchDashboardData.rejected, (state, action) => {
                 state.status = 'failed';
                 state.error = action.payload || 'Something went wrong';
             });
     },
 });
 
-export const { clearMessages } = apiSlice.actions;
+export const { clearMessages } = apiDashboardSlice.actions;
 
-export default apiSlice.reducer;
+export default apiDashboardSlice.reducer;

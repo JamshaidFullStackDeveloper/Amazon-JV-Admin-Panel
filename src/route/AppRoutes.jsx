@@ -12,19 +12,23 @@ import { Pools } from '@/pages/Pools';
 import Requests from '@/pages/Requests/Index';
 import MeetingRequests from '@/pages/Meeting Requests/Index';
 import GraveyardInvestors from '@/pages/Graveyard Investors/Index';
+import BankDetiles from '@/pages/Manage Bank/Index';
+import Profile from '@/components/Profile';
+import FAQPage from '@/pages/FAQS/Index';
+import SupportTicketSystem from '@/pages/Support';
 
 // Authentication guard
 const ProtectedRoute = ({ children }) => {
   const token = Cookies.get("token");
   const isAuthenticated = useMemo(() => Boolean(token), [token]);
-  return isAuthenticated ? children : <Navigate to="/login" />;
+  return isAuthenticated ? children : <Navigate to="/" />;
 };
 // Define all routes
 const AppRoutes = (isAuthenticated) => [
-  {
-    path: '/',
-    element: <HomePage />,
-  },
+  // {
+  //   path: '/',
+  //   element: <HomePage />,
+  // },
   {
     path: '/calculator',
     element: <InvestmentCalculator />,
@@ -35,7 +39,7 @@ const AppRoutes = (isAuthenticated) => [
   //   element: <ContactUs />,
   // },
   {
-    path: '/login',
+    path: '/',
     element: <Login />,
   },
   // {
@@ -45,51 +49,51 @@ const AppRoutes = (isAuthenticated) => [
   {
     path: '/dashboard',
     element: (
-      // <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <Dashboard />
-      // </ProtectedRoute>
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <Dashboard />
+      </ProtectedRoute>
     ),
   },
   {
     path: '/investors',
     element: (
-      // <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <Investors />
-      // </ProtectedRoute>
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <Investors />
+      </ProtectedRoute>
     ),
   },
   {
     path: '/requests',
     element: (
-      // <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <Requests />
-      // </ProtectedRoute>
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <Requests />
+      </ProtectedRoute>
     ),
   },
 
   {
     path: '/pools',
     element: (
-      // <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <Pools />
-      // </ProtectedRoute>
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <Pools />
+      </ProtectedRoute>
     ),
   },
 
   {
     path: '/meetingRequest',
     element: (
-      // <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <MeetingRequests />
-      // </ProtectedRoute>
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <MeetingRequests />
+      </ProtectedRoute>
     ),
   },
   {
     path: '/graveyardInvestors',
     element: (
-      // <ProtectedRoute isAuthenticated={isAuthenticated}>
-      <GraveyardInvestors />
-      // </ProtectedRoute>
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <GraveyardInvestors />
+      </ProtectedRoute>
     ),
   },
 
@@ -97,7 +101,31 @@ const AppRoutes = (isAuthenticated) => [
     path: '/profile',
     element: (
       <ProtectedRoute isAuthenticated={isAuthenticated}>
-        {/* <ProfilePage /> */}
+        <Profile />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/faqs',
+    element: (
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <FAQPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/support',
+    element: (
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <SupportTicketSystem />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/manageBankDetiles',
+    element: (
+      <ProtectedRoute isAuthenticated={isAuthenticated}>
+        <BankDetiles />
       </ProtectedRoute>
     ),
   },

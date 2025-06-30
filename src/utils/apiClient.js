@@ -1,12 +1,14 @@
 import axios from "axios";
 import Cookies from "js-cookie";
+// import { API_BASE_URL } from './BASE_URL';
 
-const API_BASE_URL = "https://hopeful-moral-dolphin.ngrok-free.app/api";
+const API_BASE_URL = "https://projects.tecjaunt.com/api";
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,
     headers: {
-        "Content-Type": "application/json",
+        // "Content-Type": "application/json",
+        'Content-Type': 'multipart/form-data',
     },
 });
 
@@ -27,8 +29,8 @@ apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401) {
-            Cookies.remove("token"); // Remove expired token
-            window.location.reload(); // Refresh to apply logout
+            // Cookies.remove("token"); // Remove expired token
+            // window.location.reload(); // Refresh to apply logout
         }
         return Promise.reject(error);
     }

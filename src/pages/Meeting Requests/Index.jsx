@@ -1,15 +1,28 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar, Clock, X, RotateCcw, Settings } from "lucide-react"
+import { Calendar, Clock, X, RotateCcw, Settings, Video, Check } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Trash2, Edit, Plus, XIcon } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import DashboardLayout from "@/layouts/Layout"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
+import { useDispatch, useSelector } from "react-redux"
+import { fetchGetData, resetData } from "@/redux/GetApiSlice/GetSlice"
+import { postData, resetPostStatus } from "@/redux/PostApiSlice/Index"
+import { deleteData } from "@/redux/DeleteApiSlice"
+import { fetchData, resetFetchedData } from "@/redux/GetApiSlice/Index"
+import { useLoader } from "@/context/LoaderContext"
+import { useGlobalToast } from "@/context/ToastContext"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { AlertDialogDescription } from "@radix-ui/react-alert-dialog"
+import CustomModal from "@/components/OpenModal"
+import RescheduleMeeting from "./RescheduleMeeting"
 
 const meetingRequestsData = [
     {
@@ -80,23 +93,102 @@ const meetingRequestsData = [
     },
 ]
 
+function formatTime(hour, minute, period) {
+    let h = parseInt(hour);
+    if (period === "PM" && h < 12) h += 12;
+    if (period === "AM" && h === 12) h = 0;
+    return `${String(h).padStart(2, "0")}:${minute}`;
+}
+
+function calculateDuration(start, end) {
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    return (eh * 60 + em) - (sh * 60 + sm);
+}
+
+
+const parseTime = (timeStr) => {
+    const [hourStr, minuteStr] = timeStr.split(":");
+    let hour = parseInt(hourStr, 10);
+    const minute = minuteStr;
+    const period = hour >= 12 ? "PM" : "AM";
+    if (hour > 12) hour -= 12;
+    if (hour === 0) hour = 12;
+    return { hour: hour.toString(), minute, period };
+};
+
 export default function MeetingRequests() {
+    const dispatch = useDispatch()
+    const { showLoader, hideLoader } = useLoader();
+    const { showToast } = useGlobalToast();
     const [requests, setRequests] = useState(meetingRequestsData)
-    const [sortBy, setSortBy] = useState("date-modified")
     const [showManageSlotsModal, setShowManageSlotsModal] = useState(false)
+    const [SelectedRequestId, setSelectedRequestId] = useState(null);
+    const [showApproveDialog, setShowApproveDialog] = useState(false);
+    const [showRejectDialog, setShowRejectDialog] = useState(false);
+    const [openReshaduleMeeing, setOpenResheduleMeeting] = useState(false)
+    const [rescheduleId, setRescheduleId] = useState(null)
+    const { postStatus, postError, postSuccessMessage } = useSelector((state) => state.postApi);
+    const { getdata, status, error, successMessage } = useSelector((state) => state.getapi);
+    const { data } = useSelector((state) => state.api);
+
+    const [approvingId, setApprovingId] = useState(null);
+    const [meetingLink, setMeetingLink] = useState(getdata?.data?.meeting_link)
+    const [eventName, setEventName] = useState(getdata?.data?.event_name)
+    const [loading, setIsLoading] = useState(false)
+    const AllRequest = Array.isArray(data?.data) ? data.data : [];
+
+    useEffect(() => {
+        showLoader()
+        dispatch(resetData())
+        dispatch(fetchGetData("/time-slots")).finally(hideLoader)
+    }, [dispatch, postSuccessMessage])
+    useEffect(() => {
+        dispatch(resetFetchedData())
+        dispatch(fetchData("/meeting-requests"))
+    }, [postSuccessMessage])
+
     const [slots, setSlots] = useState({
-        Monday: [
-            { id: 1, startHour: "9", startMinute: "00", startPeriod: "AM", endHour: "10", endMinute: "00", endPeriod: "AM" },
-            { id: 2, startHour: "11", startMinute: "00", startPeriod: "AM", endHour: "11", endMinute: "30", endPeriod: "AM" },
-            { id: 3, startHour: "11", startMinute: "30", startPeriod: "AM", endHour: "12", endMinute: "00", endPeriod: "PM" },
-        ],
+        Monday: [],
         Tuesday: [],
         Wednesday: [],
         Thursday: [],
         Friday: [],
         Saturday: [],
         Sunday: [],
-    })
+    });
+
+    const apiSlots = getdata?.data?.slots;
+
+    useEffect(() => {
+        const updatedSlots = { ...slots };
+
+        apiSlots?.forEach(slot => {
+            const { hour: startHour, minute: startMinute, period: startPeriod } = parseTime(slot.from);
+            const { hour: endHour, minute: endMinute, period: endPeriod } = parseTime(slot.to);
+
+            const slotData = {
+                id: slot.id,
+                startHour,
+                startMinute,
+                startPeriod,
+                endHour,
+                endMinute,
+                endPeriod,
+            };
+
+            // Only add if the slot with this ID doesn't already exist
+            if (updatedSlots[slot.day_name]) {
+                const alreadyExists = updatedSlots[slot.day_name].some(existingSlot => existingSlot.id === slot.id);
+                if (!alreadyExists) {
+                    updatedSlots[slot.day_name].push(slotData);
+                }
+            }
+        });
+
+        setSlots(updatedSlots);
+    }, [apiSlots]);
+
     const [editingSlot, setEditingSlot] = useState(null)
     const [newSlot, setNewSlot] = useState({
         day: "",
@@ -120,36 +212,44 @@ export default function MeetingRequests() {
     const periods = ["AM", "PM"]
 
     const handleReject = (id) => {
-        setRequests((prev) => prev.map((req) => (req.id === id ? { ...req, status: "rejected" } : req)))
+        setSelectedRequestId(id)
+        setShowRejectDialog(true)
     }
 
+    const confirmReject = () => {
+        const payload = {
+            request_id: SelectedRequestId,
+            status: "rejected"
+        }
+        dispatch(postData({ endpoint: `/bookings/status`, payload })).unwrap();
+    }
+
+    const handleApprove = (id) => {
+        setApprovingId(id);
+        const payload = {
+            request_id: id,
+            status: "approved"
+        }
+        dispatch(postData({ endpoint: `/bookings/status`, payload })).finally(setApprovingId(null));
+
+    }
+
+
     const handleReschedule = (id) => {
-        setRequests((prev) => prev.map((req) => (req.id === id ? { ...req, status: "reschedule" } : req)))
+        setOpenResheduleMeeting(true);
+        setRescheduleId(id);
     }
 
     const getStatusDisplay = (status) => {
         switch (status) {
             case "rejected":
                 return (
-                    <div className="flex items-center gap-2 text-red-600">
+                    <div className="flex items-center gap-2 text-red-600 h-10">
                         <X className="h-4 w-4" />
                         <span className="text-sm font-medium">Rejected</span>
                     </div>
                 )
-            case "approved":
-                return (
-                    <div className="flex items-center gap-2 text-green-600">
-                        <span className="h-2 w-2 bg-green-600 rounded-full"></span>
-                        <span className="text-sm font-medium">Approved</span>
-                    </div>
-                )
-            case "reschedule":
-                return (
-                    <div className="flex items-center gap-2 text-blue-600">
-                        <RotateCcw className="h-4 w-4" />
-                        <span className="text-sm font-medium">Reschedule</span>
-                    </div>
-                )
+
             default:
                 return null
         }
@@ -220,83 +320,164 @@ export default function MeetingRequests() {
             endHour: "",
             endMinute: "",
             endPeriod: "AM",
-        })
-        setSlotErrors({})
-    }
+        });
+    };
 
-    const saveNewSlot = () => {
-        const errors = validateSlotTime(
-            newSlot.day,
-            newSlot.startHour,
-            newSlot.startMinute,
-            newSlot.startPeriod,
-            newSlot.endHour,
-            newSlot.endMinute,
-            newSlot.endPeriod,
-        )
-        if (Object.keys(errors).length > 0) {
-            setSlotErrors(errors)
-            return
+
+    const saveNewSlot = async () => {
+        // Validate time input
+        if (!newSlot.startHour || !newSlot.endHour || !newSlot.startMinute || !newSlot.endMinute) {
+            setSlotErrors({ time: "Please fill out all time fields." });
+            return;
         }
 
-        const newSlotData = {
-            id: Date.now(),
-            startHour: newSlot.startHour,
-            startMinute: newSlot.startMinute,
-            startPeriod: newSlot.startPeriod,
-            endHour: newSlot.endHour,
-            endMinute: newSlot.endMinute,
-            endPeriod: newSlot.endPeriod,
+        // Convert to 24-hour format
+        const to24Hour = (hour, minute, period) => {
+            let h = parseInt(hour);
+            if (period === "PM" && h !== 12) h += 12;
+            if (period === "AM" && h === 12) h = 0;
+            return `${String(h).padStart(2, "0")}:${minute}`;
+        };
+
+        const from = to24Hour(newSlot.startHour, newSlot.startMinute, newSlot.startPeriod);
+        const to = to24Hour(newSlot.endHour, newSlot.endMinute, newSlot.endPeriod);
+
+        // Optional: Basic time range validation
+        if (from >= to) {
+            setSlotErrors({ time: "Start time must be before end time." });
+            return;
         }
+        const start = formatTime(newSlot.startHour, newSlot.startMinute, newSlot.startPeriod); // e.g., "13:00"
+        const end = formatTime(newSlot.endHour, newSlot.endMinute, newSlot.endPeriod);         // e.g., "15:00"
+        const duration = calculateDuration(start, end);
 
-        setSlots((prev) => ({
-            ...prev,
-            [newSlot.day]: [...(prev[newSlot.day] || []), newSlotData],
-        }))
+        // Optional: find correct day_of_week (0=Sunday, 1=Monday, ..., 6=Saturday)
+        const dayMap = {
+            Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+            Thursday: 4, Friday: 5, Saturday: 6
+        };
+        const day_of_week = dayMap[newSlot.day];
 
-        setNewSlot({
-            day: "",
-            startHour: "",
-            startMinute: "",
-            startPeriod: "AM",
-            endHour: "",
-            endMinute: "",
-            endPeriod: "AM",
-        })
-        setSlotErrors({})
-    }
+        // Final slot object
+        const slotToSend = {
+            [`slots[0][day_of_week]`]: day_of_week,
+            [`slots[0][from]`]: start,
+            [`slots[0][to]`]: end,
+            [`slots[0][duration]`]: duration,
+            // Only include `id` if you're updating an existing slot
+            // `id` can be left out or set to null for a new slot
+            // [`slots[0][id]`]: newSlot.id || "",
+        };
+        // Prepare payload
+        const payload = {
+            day_name: newSlot.day, // e.g., "Monday"
+            from,
+            to,
+            // is_active: true,
+        };
+
+        try {
+            const response = dispatch(postData({ endpoint: `/time-slots`, payload: slotToSend }))
+
+            // if (!response.ok) throw new Error("Failed to add slot");
+            setNewSlot({
+                day: "",
+                startHour: "",
+                startMinute: "",
+                startPeriod: "AM",
+                endHour: "",
+                endMinute: "",
+                endPeriod: "AM",
+            });
+            setSlotErrors({});
+
+            const savedSlot = await response.json(); // expects the same shape as your API's GET response
+
+            // Add to local state in 12-hour format
+            const parseTime = (timeStr) => {
+                const [hourStr, minute] = timeStr.split(":");
+                let hour = parseInt(hourStr);
+                const period = hour >= 12 ? "PM" : "AM";
+                if (hour > 12) hour -= 12;
+                if (hour === 0) hour = 12;
+                return { hour: hour.toString(), minute, period };
+            };
+
+            const start = parseTime(savedSlot.from);
+            const end = parseTime(savedSlot.to);
+
+            const newFormattedSlot = {
+                id: savedSlot.id,
+                startHour: start.hour,
+                startMinute: start.minute,
+                startPeriod: start.period,
+                endHour: end.hour,
+                endMinute: end.minute,
+                endPeriod: end.period,
+            };
+
+            setSlots((prevSlots) => ({
+                ...prevSlots,
+                [newSlot.day]: [...prevSlots[newSlot.day], newFormattedSlot],
+            }));
+
+            // Reset state
+            setNewSlot({
+                day: "",
+                startHour: "",
+                startMinute: "",
+                startPeriod: "AM",
+                endHour: "",
+                endMinute: "",
+                endPeriod: "AM",
+            });
+            setSlotErrors({});
+        } catch (error) {
+            setSlotErrors({ time: postError });
+            console.error(error);
+        }
+    };
+
 
     const handleEditSlot = (day, slot) => {
         setEditingSlot({ ...slot, day })
         setSlotErrors({})
     }
 
-    const saveEditSlot = () => {
-        const errors = validateSlotTime(
-            editingSlot.day,
-            editingSlot.startHour,
-            editingSlot.startMinute,
-            editingSlot.startPeriod,
-            editingSlot.endHour,
-            editingSlot.endMinute,
-            editingSlot.endPeriod,
-            editingSlot.id,
-        )
-        if (Object.keys(errors).length > 0) {
-            setSlotErrors(errors)
-            return
+    const saveEditSlot = async () => {
+
+        const start = formatTime(editingSlot.startHour, editingSlot.startMinute, editingSlot.startPeriod); // e.g., "13:00"
+        const end = formatTime(editingSlot.endHour, editingSlot.endMinute, editingSlot.endPeriod);         // e.g., "15:00"
+        const duration = calculateDuration(start, end);
+        const dayMap = {
+            Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+            Thursday: 4, Friday: 5, Saturday: 6
+        };
+        const day_of_week = dayMap[editingSlot.day];
+        const slotToSend = {
+            [`slots[0][day_of_week]`]: day_of_week,
+            [`slots[0][from]`]: start,
+            [`slots[0][to]`]: end,
+            [`slots[0][duration]`]: duration,
+            [`slots[0][id]`]: editingSlot.id || "",
+        };
+
+        try {
+            const response = dispatch(postData({ endpoint: `/update-time-slots`, payload: slotToSend }))
+
+            // if (!response.ok) throw new Error("Failed to add slot");
+            setEditingSlot(null)
+            setSlotErrors({})
+        } catch (error) {
+            setSlotErrors({ time: postError });
+            console.error(error);
         }
 
-        setSlots((prev) => ({
-            ...prev,
-            [editingSlot.day]: prev[editingSlot.day].map((slot) => (slot.id === editingSlot.id ? editingSlot : slot)),
-        }))
-
-        setEditingSlot(null)
-        setSlotErrors({})
     }
 
     const handleDeleteSlot = (day, slotId) => {
+        console.log(slotId);
+        dispatch(deleteData({ endpoint: `/time-slots?slot_ids${[]}=${[slotId]}` }))
         setSlots((prev) => ({
             ...prev,
             [day]: prev[day].filter((slot) => slot.id !== slotId),
@@ -330,8 +511,10 @@ export default function MeetingRequests() {
     }
 
     // Sorting function
-    const sortRequests = (requests, sortBy) => {
-        return [...requests].sort((a, b) => {
+    const sortRequests = (AllRequest, sortBy) => {
+        console.log(AllRequest);
+
+        return [...AllRequest].sort((a, b) => {
             switch (sortBy) {
                 case "date-modified":
                     return new Date(b.dateModified) - new Date(a.dateModified)
@@ -346,13 +529,33 @@ export default function MeetingRequests() {
             }
         })
     }
+    const handelUpdate = () => {
 
-    const allRequests = sortRequests(requests, sortBy)
+
+        const payload = {
+            event_name: String(eventName || "").trim(),
+            meeting_link: String(meetingLink || "").trim(),
+        };
+
+        setIsLoading(true)
+        dispatch(postData({ endpoint: `/update-time-slots`, payload }))
+            .finally(() => {
+                dispatch(resetPostStatus());
+                // setShowManageSlotsModal(false);
+                setIsLoading(false)
+            });
+        setIsLoading(false)
+    };
+
+
+    // const allRequests = sortRequests(AllRequest, sortBy)
     const newlyRequests = requests.filter((req) => req.status === "pending")
-    const filteredAllRequests = allRequests.filter((request) => {
+    const filteredAllRequests = AllRequest?.filter((request) => {
         if (statusFilter === "all") return true
-        return request.status === statusFilter
+        return request.request.status === statusFilter
     })
+
+    // console.log(filteredAllRequests);
 
     return (
         <DashboardLayout>
@@ -377,11 +580,11 @@ export default function MeetingRequests() {
                     </div>
 
                     {/* Main Content */}
-                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                    <div className="">
                         {/* All Requests Section */}
-                        <div className="xl:col-span-9 space-y-4">
+                        <div className=" space-y-4">
                             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                                <h2 className="text-lg font-semibold text-gray-900">All Requests ({filteredAllRequests.length})</h2>
+                                <h2 className="text-lg font-semibold text-gray-900">All Requests ({filteredAllRequests?.length})</h2>
                                 <div className="flex flex-col sm:flex-row gap-2">
                                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                                         <SelectTrigger className="w-full sm:w-[140px]">
@@ -390,143 +593,180 @@ export default function MeetingRequests() {
                                         <SelectContent>
                                             <SelectItem value="all">All Status</SelectItem>
                                             <SelectItem value="pending">Pending</SelectItem>
-                                            <SelectItem value="approved">Approved</SelectItem>
+                                            {/* <SelectItem value="approved">Approved</SelectItem> */}
                                             <SelectItem value="rejected">Rejected</SelectItem>
                                             <SelectItem value="reschedule">Reschedule</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                    <Select value={sortBy} onValueChange={setSortBy}>
-                                        <SelectTrigger className="w-full sm:w-[180px]">
-                                            <SelectValue placeholder="Sort by" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="date-modified">Date Modified</SelectItem>
-                                            <SelectItem value="date-created">Date Created</SelectItem>
-                                            <SelectItem value="name">Name</SelectItem>
-                                            <SelectItem value="status">Status</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+
                                 </div>
                             </div>
 
                             {/* All Requests Grid */}
+                            {/* <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4"> */}
+                            {/* {filteredAllRequests && filteredAllRequests.length > 0 ? ( */}
+                            {/* filteredAllRequests.map((request) => ( */}
+                            {/* <Card key={request.id} className="h-fit"> */}
+                            {/* <CardHeader className="pb-3"> */}
+                            {/* <div className="flex items-center gap-2 text-sm text-gray-500 mb-2"> */}
+                            {/* <Calendar className="h-4 w-4" /> */}
+                            {/* <span>{new Date(request.booking_date).toLocaleDateString()}</span> */}
+                            {/* </div> */}
+                            {/* <div className="flex items-center gap-2 text-sm text-gray-500 mb-3"> */}
+                            {/* <Clock className="h-4 w-4" /> */}
+                            {/* <span>{request.slot_start_time} - {request.slot_end_time}</span> */}
+                            {/* </div> */}
+                            {/* <CardTitle className="text-base font-semibold text-gray-900"> */}
+                            {/* {request?.request?.name} */}
+                            {/* </CardTitle> */}
+                            {/* </CardHeader> */}
+                            {/* <CardContent className="pt-0"> */}
+                            {/* <CardDescription className="text-sm text-gray-600 mb-4 line-clamp-3"> */}
+                            {/* {request?.request?.notes} */}
+                            {/* </CardDescription> */}
+                            {/*  */}
+                            {/* <div className="flex items-center justify-between"> */}
+                            {/* {request?.request?.status === "pending" ? */}
+                            {/* ( */}
+                            {/* <div className="flex gap-2 w-full"> */}
+                            {/* <Button */}
+                            {/* variant="destructive" */}
+                            {/* size="sm" */}
+                            {/* className="flex-1 h-8 text-xs" */}
+                            {/* onClick={() => handleReject(request.id)} */}
+                            {/* > */}
+                            {/* <X className="h-3 w-3 mr-1" /> */}
+                            {/* Reject */}
+                            {/* </Button> */}
+                            {/* <Button */}
+                            {/* variant="outline" */}
+                            {/* size="sm" */}
+                            {/* className="flex-1 h-8 text-xs border-blue-200 text-blue-600 hover:bg-blue-50" */}
+                            {/* onClick={() => handleReschedule(request.id)} */}
+                            {/* > */}
+                            {/* <RotateCcw className="h-3 w-3 mr-1" /> */}
+                            {/* Reschedule */}
+                            {/* </Button> */}
+                            {/* </div> */}
+                            {/* ) : ( */}
+                            {/* getStatusDisplay(request?.request?.status) */}
+                            {/* )} */}
+                            {/* </div> */}
+                            {/* </CardContent> */}
+                            {/* </Card> */}
+                            {/* )) */}
+                            {/* ) : ( */}
+                            {/* <div className="col-span-full text-center py-10 text-gray-500"> */}
+                            {/* <div className="flex flex-col items-center justify-center gap-2"> */}
+                            {/* <X className="w-8 h-8 text-gray-400" /> */}
+                            {/* <p className="text-sm">No booking requests found</p> */}
+                            {/* </div> */}
+                            {/* </div> */}
+                            {/* )} */}
+                            {/* </div> */}
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                                {filteredAllRequests.map((request) => (
-                                    <Card key={request.id} className="h-fit">
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                                                <Calendar className="h-4 w-4" />
-                                                <span>{request.date}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
-                                                <Clock className="h-4 w-4" />
-                                                <span>{request.time}</span>
-                                            </div>
-                                            <CardTitle className="text-base font-semibold text-gray-900">{request.requester}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="pt-0">
-                                            <CardDescription className="text-sm text-gray-600 mb-4 line-clamp-3">
-                                                {request.description}
-                                            </CardDescription>
+                                {filteredAllRequests && filteredAllRequests.length > 0 ? (
+                                    filteredAllRequests.map((request) => {
+                                        const status = request?.request?.status;
+                                        const startTime = new Date(`${request.booking_date}T${request.slot_start_time}`);
+                                        const currentTime = new Date();
+                                        const timeDiffMs = startTime - currentTime;
+                                        const timeDiffMins = timeDiffMs / 1000 / 60;
 
-                                            {/* Status or Action Buttons */}
-                                            <div className="flex items-center justify-between">
-                                                {request.status === "pending" ? (
-                                                    <div className="flex gap-2 w-full">
-                                                        <Button
-                                                            variant="destructive"
-                                                            size="sm"
-                                                            className="flex-1 h-8 text-xs"
-                                                            onClick={() => handleReject(request.id)}
-                                                        >
-                                                            <X className="h-3 w-3 mr-1" />
-                                                            Reject
-                                                        </Button>
-                                                        <Button
-                                                            variant="outline"
-                                                            size="sm"
-                                                            className="flex-1 h-8 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
-                                                            onClick={() => handleReschedule(request.id)}
-                                                        >
-                                                            <RotateCcw className="h-3 w-3 mr-1" />
-                                                            Reschedule
-                                                        </Button>
+                                        const slotDurationMins = (new Date(`1970-01-01T${request.slot_end_time}`) - new Date(`1970-01-01T${request.slot_start_time}`)) / 60000;
+                                        const disableReschedule = timeDiffMins <= slotDurationMins * 2;
+
+                                        return (
+                                            <Card key={request.id} className="h-fit">
+                                                <CardHeader className="pb-3">
+                                                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
+                                                        <Calendar className="h-4 w-4" />
+                                                        <span>{request.booking_date}</span>
                                                     </div>
-                                                ) : (
-                                                    getStatusDisplay(request.status)
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-                            </div>
-                        </div>
+                                                    <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
+                                                        <Clock className="h-4 w-4" />
+                                                        <span>{request.slot_start_time} - {request.slot_end_time}</span>
+                                                    </div>
+                                                    <CardTitle className="text-base font-semibold text-gray-900">
+                                                        {request?.request?.name}
+                                                    </CardTitle>
+                                                </CardHeader>
+                                                <CardContent className="pt-0">
+                                                    <CardDescription className="text-sm text-gray-600 mb-4 line-clamp-3">
+                                                        {request?.request?.notes}
+                                                    </CardDescription>
 
-                        {/* Newly Requests Section */}
-                        <div className="xl:col-span-3 space-y-4">
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-lg font-semibold text-gray-900">Newly Requests</h2>
-                                {newlyRequests.length > 0 && (
-                                    <Badge variant="destructive" className="bg-red-500 text-white">
-                                        {newlyRequests.length}
-                                    </Badge>
+                                                    <div className="flex flex-col gap-2">
+                                                        {status === "pending" && (
+                                                            <div className="flex gap-2 w-full">
+                                                                <Button
+                                                                    variant="destructive"
+                                                                    size="sm"
+                                                                    className="flex-1 h-8 text-xs"
+                                                                    onClick={() => handleReject(request.id)}
+                                                                >
+                                                                    <X className="h-3 w-3 mr-1" />
+                                                                    Reject
+                                                                </Button>
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="flex-1 h-8 text-xs border-green-200 text-green-600 hover:bg-green-50"
+                                                                    onClick={() => handleApprove(request.id)}
+                                                                >
+                                                                    <Check className="h-3 w-3 mr-1" />
+                                                                    Approve
+                                                                </Button>
+                                                            </div>
+                                                        )}
+
+                                                        {(status === "approved" || status === "reschedule") && (
+                                                            <div className="flex gap-2 w-full">
+                                                                <Button
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="flex-1 h-8 text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-50"
+                                                                    disabled={disableReschedule}
+                                                                    onClick={() => handleReschedule(request.id)}
+                                                                >
+                                                                    <RotateCcw className="h-3 w-3 mr-1" />
+                                                                    Reschedule
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    className="flex-1 h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white"
+                                                                    onClick={() => window.open(request?.meeting_link, "_blank")}
+                                                                >
+                                                                    <Video className="h-3 w-3 mr-1" />
+                                                                    Start Meeting
+                                                                </Button>
+                                                            </div>
+                                                        )}
+
+                                                        {status !== "pending" && status !== "approved" && (
+                                                            <div className="text-xs text-gray-500">
+                                                                {getStatusDisplay(request?.request?.status)}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        );
+                                    })
+                                ) : (
+                                    <div className="col-span-full text-center py-10 text-gray-500">
+                                        <div className="flex flex-col items-center justify-center gap-2">
+                                            <X className="w-8 h-8 text-gray-400" />
+                                            <p className="text-sm">No booking requests found</p>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 
-                            {/* Newly Requests Grid */}
-                            <div className="space-y-4 max-h-screen overflow-auto border-2 border-gray-200 p-2 shadow-md rounded-md">
-                                {newlyRequests.map((request) => (
-                                    <Card key={`new-${request.id}`} className="border-l-4 border-l-blue-500">
-                                        <CardHeader className="pb-3">
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-2">
-                                                <Calendar className="h-4 w-4" />
-                                                <span>{request.date}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-3">
-                                                <Clock className="h-4 w-4" />
-                                                <span>{request.time}</span>
-                                            </div>
-                                            <CardTitle className="text-base font-semibold text-blue-600">{request.requester}</CardTitle>
-                                        </CardHeader>
-                                        <CardContent className="pt-0">
-                                            <CardDescription className="text-sm text-gray-600 mb-4 line-clamp-2">
-                                                {request.description}
-                                            </CardDescription>
 
-                                            {/* Action Buttons */}
-                                            <div className="flex gap-2">
-                                                <Button
-                                                    variant="destructive"
-                                                    size="sm"
-                                                    className="flex-1 h-8 text-xs"
-                                                    onClick={() => handleReject(request.id)}
-                                                >
-                                                    <X className="h-3 w-3 mr-1" />
-                                                    Reject
-                                                </Button>
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="flex-1 h-8 text-xs border-blue-200 text-blue-600 hover:bg-blue-50"
-                                                    onClick={() => handleReschedule(request.id)}
-                                                >
-                                                    <RotateCcw className="h-3 w-3 mr-1" />
-                                                    Reschedule
-                                                </Button>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                ))}
-
-                                {newlyRequests.length === 0 && (
-                                    <Card className="border-dashed border-2 border-gray-200">
-                                        <CardContent className="flex items-center justify-center py-8">
-                                            <p className="text-gray-500 text-sm">No new requests</p>
-                                        </CardContent>
-                                    </Card>
-                                )}
-                            </div>
                         </div>
+
                     </div>
                 </div>
 
@@ -546,332 +786,394 @@ export default function MeetingRequests() {
                         </DialogHeader>
 
                         <div className="space-y-6">
-                            {Object.keys(slots).map((day) => (
-                                <div key={day} className="space-y-3">
-                                    <div className="flex items-center gap-3">
-                                        <div
-                                            className={`w-8 h-8 rounded-full ${getDayColor(day)} flex items-center justify-center text-white font-semibold text-sm`}
-                                        >
-                                            {getDayInitial(day)}
-                                        </div>
-                                        <h3 className="font-medium text-gray-900">{day}</h3>
-                                    </div>
 
-                                    <div className="ml-11 space-y-2">
-                                        {slots[day].map((slot) => (
-                                            <div key={slot.id} className="flex items-center gap-2 p-3 border rounded-lg">
-                                                {editingSlot && editingSlot.id === slot.id ? (
-                                                    <div className="flex-1 space-y-3">
-                                                        {/* Start Time */}
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-medium w-12">Start:</span>
-                                                            <Select
-                                                                value={editingSlot.startHour}
-                                                                onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, startHour: value }))}
-                                                            >
-                                                                <SelectTrigger className="w-16">
-                                                                    <SelectValue placeholder="Hr" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {hours.map((hour) => (
-                                                                        <SelectItem key={hour} value={hour}>
-                                                                            {hour}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <span>:</span>
-                                                            <Select
-                                                                value={editingSlot.startMinute}
-                                                                onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, startMinute: value }))}
-                                                            >
-                                                                <SelectTrigger className="w-16">
-                                                                    <SelectValue placeholder="Min" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {minutes.map((minute) => (
-                                                                        <SelectItem key={minute} value={minute}>
-                                                                            {minute}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <Select
-                                                                value={editingSlot.startPeriod}
-                                                                onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, startPeriod: value }))}
-                                                            >
-                                                                <SelectTrigger className="w-16">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {periods.map((period) => (
-                                                                        <SelectItem key={period} value={period}>
-                                                                            {period}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
+                            {/* Event Name */}
+                            <div className="space-y-1">
+                                <Label htmlFor="eventName" className="text-sm font-medium">Event Name</Label>
+                                <Input
+                                    id="eventName"
+                                    placeholder="Enter event name"
+                                    value={eventName}
+                                    onChange={(e) => setEventName(e.target.value)}
+                                    className={slotErrors.eventName ? "border-red-500" : ""}
+                                />
 
-                                                        {/* End Time */}
-                                                        <div className="flex items-center gap-2">
-                                                            <span className="text-sm font-medium w-12">End:</span>
-                                                            <Select
-                                                                value={editingSlot.endHour}
-                                                                onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, endHour: value }))}
-                                                            >
-                                                                <SelectTrigger className="w-16">
-                                                                    <SelectValue placeholder="Hr" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {hours.map((hour) => (
-                                                                        <SelectItem key={hour} value={hour}>
-                                                                            {hour}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <span>:</span>
-                                                            <Select
-                                                                value={editingSlot.endMinute}
-                                                                onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, endMinute: value }))}
-                                                            >
-                                                                <SelectTrigger className="w-16">
-                                                                    <SelectValue placeholder="Min" />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {minutes.map((minute) => (
-                                                                        <SelectItem key={minute} value={minute}>
-                                                                            {minute}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                            <Select
-                                                                value={editingSlot.endPeriod}
-                                                                onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, endPeriod: value }))}
-                                                            >
-                                                                <SelectTrigger className="w-16">
-                                                                    <SelectValue />
-                                                                </SelectTrigger>
-                                                                <SelectContent>
-                                                                    {periods.map((period) => (
-                                                                        <SelectItem key={period} value={period}>
-                                                                            {period}
-                                                                        </SelectItem>
-                                                                    ))}
-                                                                </SelectContent>
-                                                            </Select>
-                                                        </div>
+                            </div>
 
-                                                        {/* Action Buttons */}
-                                                        <div className="flex gap-2">
-                                                            <Button size="sm" onClick={saveEditSlot}>
-                                                                Save
-                                                            </Button>
-                                                            <Button size="sm" variant="outline" onClick={() => setEditingSlot(null)}>
-                                                                Cancel
-                                                            </Button>
-                                                        </div>
+                            {/* Google Email */}
+                            <div className="space-y-1">
+                                <Label htmlFor="googleEmail" className="text-sm font-medium">Meeting Link</Label>
+                                <Input
+                                    id="googleEmail"
+                                    type="email"
+                                    placeholder="Enter Google email"
+                                    value={meetingLink}
+                                    onChange={(e) => setMeetingLink(e.target.value)}
+                                    className={slotErrors.googleEmail ? "border-red-500" : ""}
+                                />
+                            </div>
 
-                                                        {/* Error Messages */}
-                                                        {(slotErrors.time || slotErrors.overlap) && (
-                                                            <Alert variant="destructive">
-                                                                <AlertDescription>{slotErrors.time || slotErrors.overlap}</AlertDescription>
-                                                            </Alert>
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        <div className="flex-1 flex items-center gap-2">
-                                                            <span className="text-sm">
-                                                                {formatTimeDisplay(slot.startHour, slot.startMinute, slot.startPeriod)}
-                                                            </span>
-                                                            <span>-</span>
-                                                            <span className="text-sm">
-                                                                {formatTimeDisplay(slot.endHour, slot.endMinute, slot.endPeriod)}
-                                                            </span>
-                                                        </div>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleEditSlot(day, slot)}
-                                                            className="h-8 w-8 p-0"
-                                                        >
-                                                            <Edit className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => handleDeleteSlot(day, slot.id)}
-                                                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </>
-                                                )}
-                                            </div>
-                                        ))}
+                            <Button className="bg-red-500 text-white hover:bg-red-600 hover:text-white" onClick={() => handelUpdate()}>
+                                Update
+                            </Button>
 
-                                        {newSlot.day === day ? (
-                                            <div className="p-3 border-2 border-dashed border-gray-300 rounded-lg space-y-3">
-                                                {/* Start Time */}
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-medium w-12">Start:</span>
-                                                    <Select
-                                                        value={newSlot.startHour}
-                                                        onValueChange={(value) => setNewSlot((prev) => ({ ...prev, startHour: value }))}
-                                                    >
-                                                        <SelectTrigger className="w-16">
-                                                            <SelectValue placeholder="Hr" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {hours.map((hour) => (
-                                                                <SelectItem key={hour} value={hour}>
-                                                                    {hour}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <span>:</span>
-                                                    <Select
-                                                        value={newSlot.startMinute}
-                                                        onValueChange={(value) => setNewSlot((prev) => ({ ...prev, startMinute: value }))}
-                                                    >
-                                                        <SelectTrigger className="w-16">
-                                                            <SelectValue placeholder="Min" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {minutes.map((minute) => (
-                                                                <SelectItem key={minute} value={minute}>
-                                                                    {minute}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Select
-                                                        value={newSlot.startPeriod}
-                                                        onValueChange={(value) => setNewSlot((prev) => ({ ...prev, startPeriod: value }))}
-                                                    >
-                                                        <SelectTrigger className="w-16">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {periods.map((period) => (
-                                                                <SelectItem key={period} value={period}>
-                                                                    {period}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
+                            {Object.keys(slots).map((day) => {
 
-                                                {/* End Time */}
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-sm font-medium w-12">End:</span>
-                                                    <Select
-                                                        value={newSlot.endHour}
-                                                        onValueChange={(value) => setNewSlot((prev) => ({ ...prev, endHour: value }))}
-                                                    >
-                                                        <SelectTrigger className="w-16">
-                                                            <SelectValue placeholder="Hr" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {hours.map((hour) => (
-                                                                <SelectItem key={hour} value={hour}>
-                                                                    {hour}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <span>:</span>
-                                                    <Select
-                                                        value={newSlot.endMinute}
-                                                        onValueChange={(value) => setNewSlot((prev) => ({ ...prev, endMinute: value }))}
-                                                    >
-                                                        <SelectTrigger className="w-16">
-                                                            <SelectValue placeholder="Min" />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {minutes.map((minute) => (
-                                                                <SelectItem key={minute} value={minute}>
-                                                                    {minute}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                    <Select
-                                                        value={newSlot.endPeriod}
-                                                        onValueChange={(value) => setNewSlot((prev) => ({ ...prev, endPeriod: value }))}
-                                                    >
-                                                        <SelectTrigger className="w-16">
-                                                            <SelectValue />
-                                                        </SelectTrigger>
-                                                        <SelectContent>
-                                                            {periods.map((period) => (
-                                                                <SelectItem key={period} value={period}>
-                                                                    {period}
-                                                                </SelectItem>
-                                                            ))}
-                                                        </SelectContent>
-                                                    </Select>
-                                                </div>
 
-                                                {/* Action Buttons */}
-                                                <div className="flex gap-2">
-                                                    <Button size="sm" onClick={saveNewSlot}>
-                                                        Add
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        onClick={() =>
-                                                            setNewSlot({
-                                                                day: "",
-                                                                startHour: "",
-                                                                startMinute: "",
-                                                                startPeriod: "AM",
-                                                                endHour: "",
-                                                                endMinute: "",
-                                                                endPeriod: "AM",
-                                                            })
-                                                        }
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                </div>
-
-                                                {/* Error Messages */}
-                                                {(slotErrors.time || slotErrors.overlap) && (
-                                                    <Alert variant="destructive">
-                                                        <AlertDescription>{slotErrors.time || slotErrors.overlap}</AlertDescription>
-                                                    </Alert>
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                onClick={() => handleAddSlot(day)}
-                                                className="w-full border-dashed"
+                                return (
+                                    <div key={day} className="space-y-3">
+                                        <div className="flex items-center gap-3">
+                                            <div
+                                                className={`w-8 h-8 rounded-full ${getDayColor(day)} flex items-center justify-center text-white font-semibold text-sm`}
                                             >
-                                                <Plus className="h-4 w-4 mr-2" />
-                                                Add slot
-                                            </Button>
-                                        )}
+                                                {getDayInitial(day)}
+                                            </div>
+                                            <h3 className="font-medium text-gray-900">{day}</h3>
+                                        </div>
+
+                                        <div className="ml-11 space-y-2">
+                                            {slots[day].map((slot) => (
+                                                <div key={slot.id} className="flex items-center gap-2 p-3 border rounded-lg">
+                                                    {editingSlot && editingSlot.id === slot.id ? (
+                                                        <div className="flex-1 space-y-3">
+                                                            {/* Start Time */}
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-medium w-12">Start:</span>
+                                                                <Select
+                                                                    value={editingSlot.startHour}
+                                                                    onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, startHour: value }))}
+                                                                >
+                                                                    <SelectTrigger className="w-16">
+                                                                        <SelectValue placeholder="Hr" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {hours.map((hour) => (
+                                                                            <SelectItem key={hour} value={hour}>
+                                                                                {hour}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <span>:</span>
+                                                                <Select
+                                                                    value={editingSlot.startMinute}
+                                                                    onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, startMinute: value }))}
+                                                                >
+                                                                    <SelectTrigger className="w-16">
+                                                                        <SelectValue placeholder="Min" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {minutes.map((minute) => (
+                                                                            <SelectItem key={minute} value={minute}>
+                                                                                {minute}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <Select
+                                                                    value={editingSlot.startPeriod}
+                                                                    onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, startPeriod: value }))}
+                                                                >
+                                                                    <SelectTrigger className="w-16">
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {periods.map((period) => (
+                                                                            <SelectItem key={period} value={period}>
+                                                                                {period}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+
+                                                            {/* End Time */}
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-sm font-medium w-12">End:</span>
+                                                                <Select
+                                                                    value={editingSlot.endHour}
+                                                                    onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, endHour: value }))}
+                                                                >
+                                                                    <SelectTrigger className="w-16">
+                                                                        <SelectValue placeholder="Hr" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {hours.map((hour) => (
+                                                                            <SelectItem key={hour} value={hour}>
+                                                                                {hour}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <span>:</span>
+                                                                <Select
+                                                                    value={editingSlot.endMinute}
+                                                                    onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, endMinute: value }))}
+                                                                >
+                                                                    <SelectTrigger className="w-16">
+                                                                        <SelectValue placeholder="Min" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {minutes.map((minute) => (
+                                                                            <SelectItem key={minute} value={minute}>
+                                                                                {minute}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                                <Select
+                                                                    value={editingSlot.endPeriod}
+                                                                    onValueChange={(value) => setEditingSlot((prev) => ({ ...prev, endPeriod: value }))}
+                                                                >
+                                                                    <SelectTrigger className="w-16">
+                                                                        <SelectValue />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        {periods.map((period) => (
+                                                                            <SelectItem key={period} value={period}>
+                                                                                {period}
+                                                                            </SelectItem>
+                                                                        ))}
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+
+                                                            {/* Action Buttons */}
+                                                            <div className="flex gap-2">
+                                                                <Button size="sm" onClick={saveEditSlot}>
+                                                                    Save
+                                                                </Button>
+                                                                <Button size="sm" variant="outline" onClick={() => setEditingSlot(null)}>
+                                                                    Cancel
+                                                                </Button>
+                                                            </div>
+
+                                                            {/* Error Messages */}
+                                                            {(slotErrors.time || slotErrors.overlap) && (
+                                                                <Alert variant="destructive">
+                                                                    <AlertDescription>{slotErrors.time || slotErrors.overlap}</AlertDescription>
+                                                                </Alert>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            <div className="flex-1 flex items-center gap-2">
+                                                                <span className="text-sm">
+                                                                    {formatTimeDisplay(slot.startHour, slot.startMinute, slot.startPeriod)}
+                                                                </span>
+                                                                <span>-</span>
+                                                                <span className="text-sm">
+                                                                    {formatTimeDisplay(slot.endHour, slot.endMinute, slot.endPeriod)}
+                                                                </span>
+                                                            </div>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => handleEditSlot(day, slot)}
+                                                                className="h-8 w-8 p-0"
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="sm"
+                                                                onClick={() => handleDeleteSlot(day, slot.id)}
+                                                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            ))}
+
+                                            {newSlot.day === day ? (
+                                                <div className="p-3 border-2 border-dashed border-gray-300 rounded-lg space-y-3">
+                                                    {/* Start Time */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium w-12">Start:</span>
+                                                        <Select
+                                                            value={newSlot.startHour}
+                                                            onValueChange={(value) => setNewSlot((prev) => ({ ...prev, startHour: value }))}
+                                                        >
+                                                            <SelectTrigger className="w-16">
+                                                                <SelectValue placeholder="Hr" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {hours.map((hour) => (
+                                                                    <SelectItem key={hour} value={hour}>
+                                                                        {hour}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <span>:</span>
+                                                        <Select
+                                                            value={newSlot.startMinute}
+                                                            onValueChange={(value) => setNewSlot((prev) => ({ ...prev, startMinute: value }))}
+                                                        >
+                                                            <SelectTrigger className="w-16">
+                                                                <SelectValue placeholder="Min" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {minutes.map((minute) => (
+                                                                    <SelectItem key={minute} value={minute}>
+                                                                        {minute}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Select
+                                                            value={newSlot.startPeriod}
+                                                            onValueChange={(value) => setNewSlot((prev) => ({ ...prev, startPeriod: value }))}
+                                                        >
+                                                            <SelectTrigger className="w-16">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {periods.map((period) => (
+                                                                    <SelectItem key={period} value={period}>
+                                                                        {period}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    {/* End Time */}
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm font-medium w-12">End:</span>
+                                                        <Select
+                                                            value={newSlot.endHour}
+                                                            onValueChange={(value) => setNewSlot((prev) => ({ ...prev, endHour: value }))}
+                                                        >
+                                                            <SelectTrigger className="w-16">
+                                                                <SelectValue placeholder="Hr" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {hours.map((hour) => (
+                                                                    <SelectItem key={hour} value={hour}>
+                                                                        {hour}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <span>:</span>
+                                                        <Select
+                                                            value={newSlot.endMinute}
+                                                            onValueChange={(value) => setNewSlot((prev) => ({ ...prev, endMinute: value }))}
+                                                        >
+                                                            <SelectTrigger className="w-16">
+                                                                <SelectValue placeholder="Min" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {minutes.map((minute) => (
+                                                                    <SelectItem key={minute} value={minute}>
+                                                                        {minute}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                        <Select
+                                                            value={newSlot.endPeriod}
+                                                            onValueChange={(value) => setNewSlot((prev) => ({ ...prev, endPeriod: value }))}
+                                                        >
+                                                            <SelectTrigger className="w-16">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {periods.map((period) => (
+                                                                    <SelectItem key={period} value={period}>
+                                                                        {period}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </div>
+
+                                                    {/* Action Buttons */}
+                                                    <div className="flex gap-2">
+                                                        <Button size="sm" onClick={() => saveNewSlot()}>
+                                                            Add
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() =>
+                                                                setNewSlot({
+                                                                    day: "",
+                                                                    startHour: "",
+                                                                    startMinute: "",
+                                                                    startPeriod: "AM",
+                                                                    endHour: "",
+                                                                    endMinute: "",
+                                                                    endPeriod: "AM",
+                                                                })
+                                                            }
+                                                        >
+                                                            Cancel
+                                                        </Button>
+                                                    </div>
+
+                                                    {/* Error Messages */}
+                                                    {(slotErrors.time || slotErrors.overlap) && (
+                                                        <Alert variant="destructive">
+                                                            <AlertDescription>{slotErrors.time || slotErrors.overlap}</AlertDescription>
+                                                        </Alert>
+                                                    )}
+                                                </div>
+                                            ) : (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleAddSlot(day)}
+                                                    className="w-full border-dashed"
+                                                >
+                                                    <Plus className="h-4 w-4 mr-2" />
+                                                    Add slot
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
 
-                        <div className="flex justify-end pt-4 border-t">
+                        <div className="flex justify-end pt-4 border-t gap-2">
                             <Button variant="outline" onClick={() => setShowManageSlotsModal(false)}>
                                 Cancel
                             </Button>
+
+
                         </div>
                     </DialogContent>
                 </Dialog>
             </div>
+
+            {/* Reject Confirmation Dialog */}
+            <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Reject Request</AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to reject this request? This action cannot be undone and the user will be notified
+                            of the rejection.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={confirmReject} className="bg-red-600 hover:bg-red-700">
+                            Reject Request
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <CustomModal
+                isOpen={openReshaduleMeeing}
+                onClose={() => setOpenResheduleMeeting(false)}
+                Children={<RescheduleMeeting onClose={() => setOpenResheduleMeeting(true)} id={rescheduleId} />}
+            />
         </DashboardLayout>
     )
 }
