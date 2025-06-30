@@ -2,7 +2,7 @@ import axios from "axios";
 import Cookies from "js-cookie";
 // import { API_BASE_URL } from './BASE_URL';
 
-const API_BASE_URL = "https://projects.tecjaunt.com/api";
+const API_BASE_URL = "https://api.barakahvault.com/api";
 
 const apiClient = axios.create({
     baseURL: API_BASE_URL,

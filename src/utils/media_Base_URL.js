@@ -1,1 +1,1 @@
-export const Media_BASE_URL = "https://projects.tecjaunt.com/storage/app/public";
+export const Media_BASE_URL = "https://api.barakahvault.com/storage/app/public";
